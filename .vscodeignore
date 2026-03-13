@@ -8,3 +8,5 @@ schemas/**
 esbuild.mjs
 tsconfig.json
 *.vsix
+out/**
+!out/extension.js
