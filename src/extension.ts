@@ -156,6 +156,18 @@ export function activate(context: vscode.ExtensionContext): void {
         ),
         vscode.workspace.onDidOpenTextDocument(doc => handleDocument(doc)),
         vscode.workspace.onDidChangeTextDocument(e => scheduleHandleDocument(e.document)),
+        // On save, flush the pending debounce immediately so there's a single
+        // shadow write instead of two (save actions + debounced edit).
+        vscode.workspace.onDidSaveTextDocument(doc => {
+            if (doc.languageId !== LANGUAGE_ID) return
+            const key = doc.uri.toString()
+            const pending = debounceTimers.get(key)
+            if (pending) {
+                clearTimeout(pending)
+                debounceTimers.delete(key)
+            }
+            handleDocument(doc)
+        }),
         vscode.workspace.onDidCloseTextDocument(doc => {
             if (doc.languageId !== LANGUAGE_ID) return
             const key = doc.uri.toString()
