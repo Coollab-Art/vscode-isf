@@ -119,6 +119,11 @@ export class ShadowFileManager {
         const content = [...headerParts, glslBody].join('\n')
 
         const existing = this.shadows.get(key)
+
+        // Skip disk write if content hasn't changed — avoids triggering
+        // a full GLSL re-analysis cycle on the shadow file for no reason.
+        if (existing?.content === content) return
+
         this.shadows.set(key, { shadowUri, headerLineCount, content, doc: existing?.doc })
 
         await vscode.workspace.fs.writeFile(shadowUri, Buffer.from(content, 'utf8'))

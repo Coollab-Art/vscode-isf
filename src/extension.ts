@@ -87,6 +87,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // Debounce timers per document to avoid re-parsing mid-edit states
     const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
+    // Debounce timers for GLSL diagnostic forwarding to avoid flicker
+    // (GLSL extensions clear then re-set diagnostics when shadow files change)
+    const glslDiagDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
     // Track which documents are currently being formatted to skip re-parsing during format application
     const formattingInFlight = new Set<string>()
 
@@ -131,7 +134,7 @@ export function activate(context: vscode.ExtensionContext): void {
             debounceTimers.delete(key)
             if (formattingInFlight.has(key)) return
             handleDocument(doc)
-        }, 50))
+        }, 300))
     }
 
     context.subscriptions.push(
@@ -158,20 +161,27 @@ export function activate(context: vscode.ExtensionContext): void {
             const key = doc.uri.toString()
             const timer = debounceTimers.get(key)
             if (timer) { clearTimeout(timer); debounceTimers.delete(key) }
+            const glslTimer = glslDiagDebounceTimers.get(key)
+            if (glslTimer) { clearTimeout(glslTimer); glslDiagDebounceTimers.delete(key) }
             regionCache.delete(key)
             shadowManager?.remove(key)
             jsonDiagnostics.delete(doc.uri)
             glslDiagnostics.delete(doc.uri)
             versionDiagnostics.delete(doc.uri)
         }),
-        // Forward GLSL diagnostics from shadow files to real ISF files
+        // Forward GLSL diagnostics from shadow files to real ISF files.
+        // GLSL extensions clear then re-set diagnostics when shadow files change.
+        // To avoid flicker: non-empty results are forwarded immediately (cancel any
+        // pending clear), while empty results are delayed — they're usually just the
+        // transient "clearing" phase before re-analysis.
         vscode.languages.onDidChangeDiagnostics(e => {
             if (!shadowManager) return
             for (const uri of e.uris) {
                 const realUri = shadowManager.getRealUri(uri)
                 if (!realUri) continue
 
-                const regions = regionCache.get(realUri.toString())
+                const key = realUri.toString()
+                const regions = regionCache.get(key)
                 if (!regions?.glsl) continue
 
                 const headerLineCount = shadowManager.getHeaderLineCount(realUri)
@@ -192,7 +202,20 @@ export function activate(context: vscode.ExtensionContext): void {
                         )
                     })
 
-                glslDiagnostics.set(realUri, remapped)
+                const pendingClear = glslDiagDebounceTimers.get(key)
+                if (remapped.length > 0) {
+                    // Real results: forward immediately, cancel any pending clear
+                    if (pendingClear) { clearTimeout(pendingClear); glslDiagDebounceTimers.delete(key) }
+                    glslDiagnostics.set(realUri, remapped)
+                } else {
+                    // Empty results: likely a transient clear before re-analysis.
+                    // Delay so it only takes effect if no real results follow.
+                    if (pendingClear) clearTimeout(pendingClear)
+                    glslDiagDebounceTimers.set(key, setTimeout(() => {
+                        glslDiagDebounceTimers.delete(key)
+                        glslDiagnostics.set(realUri, [])
+                    }, 500))
+                }
             }
         }),
     )
