@@ -4,7 +4,7 @@
 //
 // Shadow files live in a `.isf-shadows/` directory at the workspace root so that
 // VS Code's file watcher picks up changes and auto-refreshes the in-memory document.
-// The directory is hidden from the explorer via `files.exclude` and should be ignored in git.
+// The directory is hidden from the explorer via `files.exclude` and ignored in git.
 // We write to disk with workspace.fs.writeFile and open the document once with
 // openTextDocument (no visible tab). Subsequent writes are auto-refreshed by the
 // file watcher, keeping the document always clean (never dirty).
@@ -13,6 +13,7 @@
 import * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
+import { randomUUID } from 'crypto'
 import { IsfRegions } from './isf-parser'
 
 const SHADOW_DIR_NAME = '.isf-shadows'
@@ -51,6 +52,13 @@ export class ShadowFileManager {
         }
         this.shadowDirPath = path.join(workspaceRoot, SHADOW_DIR_NAME)
         fs.mkdirSync(this.shadowDirPath, { recursive: true })
+
+        // Auto-create .gitignore so shadow files are never committed
+        const gitignorePath = path.join(this.shadowDirPath, '.gitignore')
+        if (!fs.existsSync(gitignorePath)) {
+            fs.writeFileSync(gitignorePath, '*\n', 'utf8')
+        }
+
         this.preambleLines = preambleText.trimEnd().split('\n')
         this.v1OnlyLines = v1OnlyText.trimEnd().split('\n')
         this.v2SharedLines = v2SharedText.trimEnd().split('\n')
@@ -164,7 +172,7 @@ export class ShadowFileManager {
     async openFreshShadowDocument(realUri: vscode.Uri): Promise<{ document: vscode.TextDocument, tempPath: string } | undefined> {
         const shadow = this.shadows.get(realUri.toString())
         if (!shadow) return undefined
-        const tempPath = path.join(this.shadowDirPath, `_fmt_${Date.now()}.glsl`)
+        const tempPath = path.join(this.shadowDirPath, `_fmt_${randomUUID()}.glsl`)
         fs.writeFileSync(tempPath, shadow.content, 'utf8')
         const document = await vscode.workspace.openTextDocument(vscode.Uri.file(tempPath))
         return { document, tempPath }
@@ -177,7 +185,7 @@ export class ShadowFileManager {
     remove(realUriStr: string): void {
         const shadow = this.shadows.get(realUriStr)
         if (shadow) {
-            vscode.workspace.fs.delete(shadow.shadowUri).then(() => {}, () => {})
+            vscode.workspace.fs.delete(shadow.shadowUri).then(() => {}, err => console.warn('ISF: failed to delete shadow file:', err))
             this.shadows.delete(realUriStr)
         }
     }
@@ -185,7 +193,7 @@ export class ShadowFileManager {
     dispose(): void {
         for (const d of this.disposables) d.dispose()
         for (const [, info] of this.shadows) {
-            vscode.workspace.fs.delete(info.shadowUri).then(() => {}, () => {})
+            vscode.workspace.fs.delete(info.shadowUri).then(() => {}, err => console.warn('ISF: failed to delete shadow file:', err))
         }
         this.shadows.clear()
     }
@@ -197,13 +205,17 @@ export class ShadowFileManager {
     }
 
     // Add .isf-shadows/ to files.exclude so it doesn't show in the explorer
-    private hideFromExplorer(): void {
-        const config = vscode.workspace.getConfiguration('files')
-        const exclude: Record<string, boolean> = { ...config.get('exclude') }
-        const key = SHADOW_DIR_NAME + '/'
-        if (!exclude[key]) {
-            exclude[key] = true
-            config.update('exclude', exclude, vscode.ConfigurationTarget.Workspace)
+    private async hideFromExplorer(): Promise<void> {
+        try {
+            const config = vscode.workspace.getConfiguration('files')
+            const exclude: Record<string, boolean> = { ...config.get('exclude') }
+            const key = SHADOW_DIR_NAME + '/'
+            if (!exclude[key]) {
+                exclude[key] = true
+                await config.update('exclude', exclude, vscode.ConfigurationTarget.Workspace)
+            }
+        } catch (err) {
+            console.warn('ISF: failed to hide shadow directory from explorer:', err)
         }
     }
 }

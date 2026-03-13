@@ -6,7 +6,7 @@ export class IsfFormattingProvider implements vscode.DocumentFormattingEditProvi
     constructor(
         private readonly regionCache: Map<string, IsfRegions>,
         private readonly formattingInFlight: Set<string>,
-        private readonly shadowManager: ShadowFileManager,
+        private readonly shadowManager: ShadowFileManager | undefined,
     ) {}
 
     async provideDocumentFormattingEdits(
@@ -25,12 +25,21 @@ export class IsfFormattingProvider implements vscode.DocumentFormattingEditProvi
         // Update the cache and shadow file so they reflect the latest content
         // (the debounced handleDocument may not have run yet if the user saved quickly)
         this.regionCache.set(key, regions)
-        this.shadowManager.update(document, regions)
+        await this.shadowManager?.update(document, regions)
 
         // Mark this document as formatting-in-flight so handleDocument skips re-parsing
-        // while VS Code applies our edits
+        // while VS Code applies our edits. Cleared when the edit is applied (onDidChangeTextDocument)
+        // or after a safety timeout.
         this.formattingInFlight.add(key)
-        setTimeout(() => this.formattingInFlight.delete(key), 500)
+        const clearFormatting = () => this.formattingInFlight.delete(key)
+        const safetyTimeout = setTimeout(clearFormatting, 5000)
+        const listener = vscode.workspace.onDidChangeTextDocument(e => {
+            if (e.document.uri.toString() === key) {
+                clearTimeout(safetyTimeout)
+                listener.dispose()
+                clearFormatting()
+            }
+        })
 
         const edits: vscode.TextEdit[] = []
 
@@ -39,6 +48,13 @@ export class IsfFormattingProvider implements vscode.DocumentFormattingEditProvi
 
         const glslEdit = await this.formatGlslRegion(document, regions, options)
         if (glslEdit) edits.push(glslEdit)
+
+        // If no edits, VS Code won't fire onDidChangeTextDocument, so clean up now
+        if (edits.length === 0) {
+            clearTimeout(safetyTimeout)
+            listener.dispose()
+            clearFormatting()
+        }
 
         return edits
     }
@@ -81,7 +97,7 @@ export class IsfFormattingProvider implements vscode.DocumentFormattingEditProvi
         regions: IsfRegions,
         options: vscode.FormattingOptions,
     ): Promise<vscode.TextEdit | undefined> {
-        if (!regions.glsl) return undefined
+        if (!regions.glsl || !this.shadowManager) return undefined
 
         const content = this.shadowManager.getContent(document.uri)
         if (!content) return undefined

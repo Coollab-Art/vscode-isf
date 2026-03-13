@@ -1,5 +1,10 @@
 .vscode/**
+.claude/**
+.gitignore
 src/**
 node_modules/**
+glsl/**
+schemas/**
+esbuild.mjs
 tsconfig.json
 *.vsix

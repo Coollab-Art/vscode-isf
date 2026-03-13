@@ -1,6 +1,17 @@
 # ISF (Interactive Shader Format) for VS Code
 
-Full IDE support for [ISF](https://isf.video/) shaders: autocompletion, hover documentation, error diagnostics, and formatting — powered by any installed GLSL extension.
+## Setup
+
+Files with `.isf` extension are recognized automatically. For `.fs` and `.vs` files (the standard ISF extensions), you need to manually associate them since they conflict with F# and other languages. Add this to your workspace or user settings:
+
+```json
+"files.associations": {
+    "*.fs": "isf",
+    "*.vs": "isf"
+}
+```
+
+You can also scope this to specific directories (e.g. `"shaders/*.fs": "isf"`), or select "ISF" from the language picker in the bottom-right corner of the editor.
 
 ## Features
 
@@ -43,12 +54,12 @@ Paired `.vs` files (same name as the `.fs`) get the same INPUTS in scope plus `i
 
 ## Requirements
 
-For GLSL autocompletion, hover, and error diagnostics, install a GLSL extension.
+For GLSL autocompletion, hover, and error diagnostics, install a GLSL extension. The extension will prompt you if none is detected.
 
 ## Extension Settings
 
-No settings required.
+No settings.
 
 ## Known Issues
 
-- Shadow files (`.isf-shadows/`) are created at the workspace root to enable GLSL analysis. This directory is hidden from the file explorer and should be added to `.gitignore`.
+- Shadow files (`.isf-shadows/`) are created at the workspace root to enable GLSL analysis. This directory is hidden from the file explorer and has a `.gitignore` created automatically.

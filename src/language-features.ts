@@ -7,7 +7,7 @@ export class IsfCompletionProvider implements vscode.CompletionItemProvider {
     constructor(
         private readonly jsonFeatures: IsfJsonFeatures,
         private readonly regionCache: Map<string, IsfRegions>,
-        private readonly shadowManager: ShadowFileManager,
+        private readonly shadowManager: ShadowFileManager | undefined,
     ) {}
 
     async provideCompletionItems(
@@ -23,7 +23,7 @@ export class IsfCompletionProvider implements vscode.CompletionItemProvider {
         }
 
         // GLSL body region -- forward to shadow file for full completions
-        if (regions.glsl && position.line >= regions.glsl.startLine) {
+        if (this.shadowManager && regions.glsl && position.line >= regions.glsl.startLine) {
             const shadowDoc = await this.shadowManager.openShadowDocument(document.uri)
             if (shadowDoc) {
                 const headerLineCount = this.shadowManager.getHeaderLineCount(document.uri)
@@ -53,7 +53,7 @@ export class IsfHoverProvider implements vscode.HoverProvider {
     constructor(
         private readonly jsonFeatures: IsfJsonFeatures,
         private readonly regionCache: Map<string, IsfRegions>,
-        private readonly shadowManager: ShadowFileManager,
+        private readonly shadowManager: ShadowFileManager | undefined,
     ) {}
 
     async provideHover(
@@ -69,7 +69,7 @@ export class IsfHoverProvider implements vscode.HoverProvider {
         }
 
         // GLSL body region -- forward to shadow file
-        if (regions.glsl && position.line >= regions.glsl.startLine) {
+        if (this.shadowManager && regions.glsl && position.line >= regions.glsl.startLine) {
             const shadowDoc = await this.shadowManager.openShadowDocument(document.uri)
             if (shadowDoc) {
                 const headerLineCount = this.shadowManager.getHeaderLineCount(document.uri)

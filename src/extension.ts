@@ -6,24 +6,52 @@ import { IsfFormattingProvider } from './formatter'
 import { IsfJsonFeatures } from './json-features'
 import { ShadowFileManager, parseIsfVersion, IsfVersion } from './glsl-shadow-file'
 
+// Preamble files inlined at build time by esbuild's text loader
+import preamble from '../glsl/isf-preamble.glsl'
+import v1Only from '../glsl/isf-fs-v1-preamble.glsl'
+import v2Shared from '../glsl/isf-v2-preamble.glsl'
+import v2Only from '../glsl/isf-fs-v2-preamble.glsl'
+import fsPreamble from '../glsl/isf-fs-preamble.glsl'
+import v1VsPreamble from '../glsl/isf-vs-v1-preamble.glsl'
+import v2VsPreamble from '../glsl/isf-vs-v2-preamble.glsl'
+
+// JSON schema inlined at build time
+import schema from '../schemas/isf-header.schema.json'
+
 const LANGUAGE_ID = 'isf'
 
 export function activate(context: vscode.ExtensionContext): void {
-    const jsonFeatures = new IsfJsonFeatures(context.asAbsolutePath('schemas/isf-header.schema.json'))
-
-    // Read preamble files for the shadow file manager
-    const preamble     = fs.readFileSync(context.asAbsolutePath('glsl/isf-preamble.glsl'), 'utf8')
-    const v1Only       = fs.readFileSync(context.asAbsolutePath('glsl/isf-fs-v1-preamble.glsl'), 'utf8')
-    const v2Shared     = fs.readFileSync(context.asAbsolutePath('glsl/isf-v2-preamble.glsl'), 'utf8')
-    const v2Only       = fs.readFileSync(context.asAbsolutePath('glsl/isf-fs-v2-preamble.glsl'), 'utf8')
-    const fsPreamble   = fs.readFileSync(context.asAbsolutePath('glsl/isf-fs-preamble.glsl'), 'utf8')
-    const v1VsPreamble = fs.readFileSync(context.asAbsolutePath('glsl/isf-vs-v1-preamble.glsl'), 'utf8')
-    const v2VsPreamble = fs.readFileSync(context.asAbsolutePath('glsl/isf-vs-v2-preamble.glsl'), 'utf8')
+    const jsonFeatures = new IsfJsonFeatures(schema as any)
 
     // Shadow file manager: maintains a real .glsl file per ISF document
     // so that any GLSL extension can provide full completions, hover, and diagnostics.
-    const shadowManager = new ShadowFileManager(preamble, v1Only, v2Shared, v2Only, fsPreamble, v1VsPreamble, v2VsPreamble)
-    context.subscriptions.push({ dispose: () => shadowManager.dispose() })
+    // Requires a workspace folder for the shadow directory; without one, GLSL features are disabled.
+    let shadowManager: ShadowFileManager | undefined
+    if (vscode.workspace.workspaceFolders?.length) {
+        shadowManager = new ShadowFileManager(preamble, v1Only, v2Shared, v2Only, fsPreamble, v1VsPreamble, v2VsPreamble)
+        context.subscriptions.push({ dispose: () => shadowManager!.dispose() })
+    } else {
+        vscode.window.showWarningMessage('ISF: Open a folder for full GLSL support (diagnostics, completions, formatting). JSON header features work without a folder.')
+    }
+
+    // Warn once if no GLSL extension is installed
+    const hasGlslExtension = vscode.extensions.all.some(ext => {
+        const langs = ext.packageJSON?.contributes?.languages
+        return Array.isArray(langs) && langs.some((l: { id?: string }) => l.id === 'glsl')
+    })
+    if (!hasGlslExtension && !context.globalState.get('isf.glslWarningDismissed')) {
+        vscode.window.showInformationMessage(
+            'Install a GLSL extension for full ISF support (diagnostics, completions, formatting).',
+            'Search Extensions',
+            'Don\'t Show Again',
+        ).then(choice => {
+            if (choice === 'Search Extensions') {
+                vscode.commands.executeCommand('workbench.extensions.search', 'glsl')
+            } else if (choice === 'Don\'t Show Again') {
+                context.globalState.update('isf.glslWarningDismissed', true)
+            }
+        })
+    }
 
     const regionCache = new Map<string, IsfRegions>()
     const jsonDiagnostics = vscode.languages.createDiagnosticCollection('isf-json')
@@ -35,7 +63,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // Track which documents are currently being formatted to skip re-parsing during format application
     const formattingInFlight = new Set<string>()
 
-    function handleDocument(doc: vscode.TextDocument): void {
+    async function handleDocument(doc: vscode.TextDocument): Promise<void> {
         if (doc.languageId !== LANGUAGE_ID) return
         const regions = parseIsf(doc.getText())
         regionCache.set(doc.uri.toString(), regions)
@@ -58,12 +86,12 @@ export function activate(context: vscode.ExtensionContext): void {
         // Update the shadow file with preamble + per-file declarations + GLSL body.
         // Uses vscode.workspace.fs.writeFile which notifies the document model,
         // and ensures the shadow doc is open so the GLSL extension watches it.
-        shadowManager.update(doc, regions, siblingRegions)
+        await shadowManager?.update(doc, regions, siblingRegions)
 
         if (regions.json) {
             jsonFeatures.getDiagnostics(regions.json).then(diags => {
                 jsonDiagnostics.set(doc.uri, diags)
-            }, () => {})
+            }, err => console.warn('ISF: JSON diagnostics failed:', err))
         } else {
             jsonDiagnostics.set(doc.uri, [])
         }
@@ -112,13 +140,14 @@ export function activate(context: vscode.ExtensionContext): void {
             const timer = debounceTimers.get(key)
             if (timer) { clearTimeout(timer); debounceTimers.delete(key) }
             regionCache.delete(key)
-            shadowManager.remove(key)
+            shadowManager?.remove(key)
             jsonDiagnostics.delete(doc.uri)
             glslDiagnostics.delete(doc.uri)
             versionDiagnostics.delete(doc.uri)
         }),
         // Forward GLSL diagnostics from shadow files to real ISF files
         vscode.languages.onDidChangeDiagnostics(e => {
+            if (!shadowManager) return
             for (const uri of e.uris) {
                 const realUri = shadowManager.getRealUri(uri)
                 if (!realUri) continue

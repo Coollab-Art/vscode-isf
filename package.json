@@ -1,9 +1,18 @@
 {
   "name": "vscode-isf",
-  "publisher": "Coollab",
+  "publisher": "coollab",
   "displayName": "ISF (Interactive Shader Format)",
   "description": "Full IDE support for ISF shaders: JSON header validation, autocompletion, hover, GLSL diagnostics, and formatting.",
   "version": "0.1.0",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Coollab-Art/vscode-isf"
+  },
+  "homepage": "https://github.com/Coollab-Art/vscode-isf",
+  "bugs": {
+    "url": "https://github.com/Coollab-Art/vscode-isf/issues"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -30,8 +39,7 @@
           "Interactive Shader Format"
         ],
         "extensions": [
-          ".fs",
-          ".vs"
+          ".isf"
         ],
         "configuration": "./language-configuration.json"
       }
@@ -49,13 +57,15 @@
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.mjs --production",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "node esbuild.mjs --watch"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
+    "esbuild": "^0.27.4",
     "typescript": "^5.3.0"
   },
   "dependencies": {

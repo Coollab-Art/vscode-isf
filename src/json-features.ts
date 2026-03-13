@@ -4,7 +4,6 @@
 // The built-in JSON LS only handles `file://` and `untitled://` schemes, so it cannot
 // process our virtual documents — hence we embed the same underlying library ourselves.
 import * as vscode from 'vscode'
-import * as fs from 'fs'
 import {
     getLanguageService,
     TextDocument as JSONTextDocument,
@@ -76,9 +75,8 @@ export class IsfJsonFeatures {
     })
     private readonly schemaContent: string
 
-    constructor(schemaPath: string) {
-        this.schemaContent = fs.readFileSync(schemaPath, 'utf8')
-        const schema: JSONSchema = JSON.parse(this.schemaContent)
+    constructor(schema: JSONSchema) {
+        this.schemaContent = JSON.stringify(schema)
         this.service.configure({
             validate: true,
             schemas: [{ uri: SCHEMA_URI, fileMatch: ['*.isf.json'], schema }],
