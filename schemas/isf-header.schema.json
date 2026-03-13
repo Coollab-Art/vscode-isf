@@ -1,0 +1,179 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ISF Header",
+  "description": "Interactive Shader Format (ISF) JSON metadata header",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "ISFVSN": {
+      "description": "ISF version. Defaults to '1.0' if absent.",
+      "type": ["string", "number"],
+      "default": "2.0",
+      "defaultSnippets": [{ "body": "${1:2.0}" }]
+    },
+    "VSN": {
+      "description": "Version of this ISF shader, you can use it to track changes in this file",
+      "type": ["string", "number"],
+      "default": "1.0"
+    },
+    "DESCRIPTION": {
+      "description": "Human-readable description of the shader",
+      "type": "string",
+      "default": ""
+    },
+    "CREDIT": {
+      "description": "Author attribution",
+      "type": "string",
+      "default": ""
+    },
+    "CATEGORIES": {
+      "description": "Category tags for organizing shaders",
+      "type": "array",
+      "items": { "type": "string" },
+      "defaultSnippets": [{ "body": ["$1"] }]
+    },
+    "INPUTS": {
+      "description": "Input variable definitions exposed as shader parameters",
+      "type": "array",
+      "items": { "$ref": "#/definitions/input" },
+      "default": [{}]
+    },
+    "PASSES": {
+      "description": "Rendering pass definitions for multi-pass shaders",
+      "type": "array",
+      "items": { "$ref": "#/definitions/pass" },
+      "default": [{}]
+    },
+    "IMPORTED": {
+      "description": "Images imported from file paths (v2 only)",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["PATH"],
+        "additionalProperties": false,
+        "properties": {
+          "PATH": { "type": "string", "description": "Relative path to the image file", "default": "" }
+        }
+      },
+      "default": { "someImage": { "PATH": "" } }
+    },
+    "PERSISTENT_BUFFERS": {
+      "description": "Persistent buffer declarations (v1 only)",
+      "oneOf": [
+        {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "FLOAT": { "type": "boolean", "description": "Use floating-point precision", "default": false },
+              "WIDTH": { "type": "string", "description": "Width expression", "default": "$WIDTH" },
+              "HEIGHT": { "type": "string", "description": "Height expression", "default": "$HEIGHT" }
+            }
+          }
+        }
+      ],
+      "default": []
+    }
+  },
+  "definitions": {
+    "input": {
+      "type": "object",
+      "required": ["NAME", "TYPE"],
+      "additionalProperties": false,
+      "properties": {
+        "NAME": {
+          "type": "string",
+          "description": "Variable name used in the shader code (no whitespace)",
+          "pattern": "^\\S+$",
+          "default": ""
+        },
+        "LABEL": {
+          "type": "string",
+          "description": "Human-readable label for the UI",
+          "default": ""
+        },
+        "TYPE": {
+          "type": "string",
+          "description": "Type of the variable (influences which other properties are available)",
+          "enum": ["bool", "float", "long", "point2D", "color", "image", "event", "audio", "audioFFT"],
+          "enumDescriptions": [
+            "Boolean true/false value",
+            "32-bit floating-point number",
+            "Integer value with optional enum labels (see VALUES and LABELS)",
+            "2D point [x, y]",
+            "RGBA color [r, g, b, a]",
+            "Texture/image sampler",
+            "One-shot trigger event (true for one frame when triggered)",
+            "Raw audio wave data passed as an image (one row per channel, one column per sample)",
+            "FFT of audio data passed as an image (one row per channel, one column per FFT value)"
+          ]
+        },
+        "DEFAULT": {
+          "description": "Default value"
+        },
+        "IDENTITY": {
+          "description": "Identity/neutral value"
+        },
+        "MIN": {
+          "description": "Minimum value"
+        },
+        "MAX": {
+          "description": "Maximum value"
+        },
+        "VALUES": {
+          "description": "Integers corresponding to each value of the ENUM",
+          "type": "array",
+          "items": { "type": "integer" },
+          "default": [0]
+        },
+        "LABELS": {
+          "description": "Display labels for each enum value in VALUES",
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [""]
+        }
+      }
+    },
+    "pass": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "TARGET": {
+          "type": "string",
+          "description": "Name of the texture to render into (accessible in subsequent passes as a sampler)",
+          "default": ""
+        },
+        "PERSISTENT": {
+          "description": "Whether the buffer persists across frames (for feedback effects)",
+          "type": ["boolean", "number", "string"],
+          "default": true
+        },
+        "FLOAT": {
+          "description": "Whether the texture should use 32-bit floating-point precision",
+          "type": ["boolean", "number", "string"],
+          "default": true
+        },
+        "WIDTH": {
+          "type": "string",
+          "description": "Width expression. Can reference $WIDTH, $HEIGHT, and INPUT variables, e.g. 'floor($WIDTH/2.0)'",
+          "default": "$WIDTH"
+        },
+        "HEIGHT": {
+          "type": "string",
+          "description": "Height expression. Can reference $WIDTH, $HEIGHT, and INPUT variables, e.g. 'floor($HEIGHT/2.0)'",
+          "default": "$HEIGHT"
+        },
+        "DESCRIPTION": {
+          "type": "string",
+          "description": "Human-readable description for this pass",
+          "default": ""
+        }
+      }
+    }
+  }
+}

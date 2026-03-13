@@ -1,0 +1,64 @@
+{
+  "name": "vscode-isf",
+  "publisher": "Coollab",
+  "displayName": "ISF (Interactive Shader Format)",
+  "description": "Full IDE support for ISF shaders: JSON header validation, autocompletion, hover, GLSL diagnostics, and formatting.",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Formatters"
+  ],
+  "keywords": [
+    "ISF",
+    "GLSL",
+    "shader",
+    "fragment shader",
+    "Interactive Shader Format"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "isf",
+        "aliases": [
+          "ISF",
+          "Interactive Shader Format"
+        ],
+        "extensions": [
+          ".fs",
+          ".vs"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "isf",
+        "scopeName": "source.isf",
+        "path": "./syntaxes/isf.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.block.json": "json",
+          "meta.embedded.block.glsl": "glsl"
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "vscode-json-languageservice": "^5.7.2"
+  }
+}
