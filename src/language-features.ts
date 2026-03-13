@@ -15,10 +15,10 @@ export class IsfCompletionProvider implements vscode.CompletionItemProvider {
         position: vscode.Position,
     ): Promise<vscode.CompletionItem[] | null> {
         const regions = this.regionCache.get(document.uri.toString())
-        if (!regions?.json) return null
+        if (!regions) return null
 
         // JSON header region -- provide schema-based completions
-        if (position.line >= regions.json.startLine && position.line <= regions.json.endLine) {
+        if (regions.json && position.line >= regions.json.startLine && position.line <= regions.json.endLine) {
             return this.jsonFeatures.getCompletions(regions.json, position.line, position.character)
         }
 
@@ -61,10 +61,10 @@ export class IsfHoverProvider implements vscode.HoverProvider {
         position: vscode.Position,
     ): Promise<vscode.Hover | null> {
         const regions = this.regionCache.get(document.uri.toString())
-        if (!regions?.json) return null
+        if (!regions) return null
 
         // JSON header region -- provide schema-based hover
-        if (position.line >= regions.json.startLine && position.line <= regions.json.endLine) {
+        if (regions.json && position.line >= regions.json.startLine && position.line <= regions.json.endLine) {
             return this.jsonFeatures.getHover(regions.json, position.line, position.character)
         }
 

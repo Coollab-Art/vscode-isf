@@ -1,5 +1,6 @@
 import * as vscode from 'vscode'
 import * as fs from 'fs'
+import * as path from 'path'
 import { parseIsf, IsfRegions } from './isf-parser'
 import { IsfCompletionProvider, IsfHoverProvider } from './language-features'
 import { IsfFormattingProvider } from './formatter'
@@ -19,6 +20,28 @@ import v2VsPreamble from '../glsl/isf-vs-v2-preamble.glsl'
 import schema from '../schemas/isf-header.schema.json'
 
 const LANGUAGE_ID = 'isf'
+
+// Find a sibling file (same name, different extension) that contains a JSON header.
+function findSiblingWithJsonHeader(filePath: string): IsfRegions | undefined {
+    const dir = path.dirname(filePath)
+    const baseName = path.basename(filePath, path.extname(filePath))
+    let entries: string[]
+    try {
+        entries = fs.readdirSync(dir)
+    } catch { return undefined }
+
+    for (const entry of entries) {
+        const entryBase = path.basename(entry, path.extname(entry))
+        if (entryBase !== baseName) continue
+        const entryPath = path.join(dir, entry)
+        if (entryPath === filePath) continue
+        try {
+            const regions = parseIsf(fs.readFileSync(entryPath, 'utf8'))
+            if (regions.json) return regions
+        } catch { /* skip unreadable files */ }
+    }
+    return undefined
+}
 
 export function activate(context: vscode.ExtensionContext): void {
     const jsonFeatures = new IsfJsonFeatures(schema as any)
@@ -68,19 +91,11 @@ export function activate(context: vscode.ExtensionContext): void {
         const regions = parseIsf(doc.getText())
         regionCache.set(doc.uri.toString(), regions)
 
-        // For .vs files, find and parse the sibling .fs to get JSON header (INPUTS, ISFVSN, etc.)
+        // For vertex shaders (no JSON header), find a sibling file with the same name
+        // that has a JSON header to get INPUTS, ISFVSN, etc.
         let siblingRegions: IsfRegions | undefined
-        if (doc.uri.fsPath.endsWith('.vs')) {
-            const siblingPath = doc.uri.fsPath.slice(0, -3) + '.fs'
-            const siblingUri = vscode.Uri.file(siblingPath)
-            const siblingDoc = vscode.workspace.textDocuments.find(d => d.uri.toString() === siblingUri.toString())
-            if (siblingDoc) {
-                siblingRegions = parseIsf(siblingDoc.getText())
-            } else {
-                try {
-                    siblingRegions = parseIsf(fs.readFileSync(siblingPath, 'utf8'))
-                } catch { /* no sibling .fs */ }
-            }
+        if (!regions.json) {
+            siblingRegions = findSiblingWithJsonHeader(doc.uri.fsPath)
         }
 
         // Update the shadow file with preamble + per-file declarations + GLSL body.
@@ -96,7 +111,7 @@ export function activate(context: vscode.ExtensionContext): void {
             jsonDiagnostics.set(doc.uri, [])
         }
 
-        const isVertexShader = doc.uri.fsPath.endsWith('.vs')
+        const isVertexShader = !regions.json
         // For .vs files: use the .fs sibling's JSON (for version detection) but the .vs GLSL body (for scanning).
         const regionsForVersionCheck: IsfRegions = siblingRegions
             ? { json: siblingRegions.json, glsl: regions.glsl }
@@ -209,12 +224,30 @@ function checkVersionMismatch(regions: IsfRegions, isVertexShader: boolean): vsc
     const v2Pattern = new RegExp(`\\b(${v2OnlyFiltered.map(i => i.pattern).join('|')})\\b`, 'g')
     const v1Pattern = new RegExp(`\\b(${v1OnlyFiltered.map(i => i.pattern).join('|')})\\b`, 'g')
 
+    // Vertex-only identifiers used in a fragment shader
+    const vertexOnlyInFragment = !isVertexShader
+        ? [...V1_ONLY, ...V2_ONLY].filter(i => i.vertexOnly)
+        : []
+    const vertexOnlyPattern = vertexOnlyInFragment.length
+        ? new RegExp(`\\b(${vertexOnlyInFragment.map(i => i.pattern).join('|')})\\b`, 'g')
+        : null
+
     const version = parseIsfVersion(regions)
     const diagnostics: vscode.Diagnostic[] = []
     const lines = regions.glsl.content.split('\n')
 
     for (let i = 0; i < lines.length; i++) {
         const realLine = regions.glsl.startLine + i
+
+        if (vertexOnlyPattern) {
+            for (const match of lines[i].matchAll(vertexOnlyPattern)) {
+                diagnostics.push(new vscode.Diagnostic(
+                    new vscode.Range(realLine, match.index!, realLine, match.index! + match[1].length),
+                    `'${match[1]}' is only available in vertex shaders (.vs).`,
+                    vscode.DiagnosticSeverity.Warning,
+                ))
+            }
+        }
 
         if (version === IsfVersion.V1) {
             for (const match of lines[i].matchAll(v2Pattern)) {

@@ -86,13 +86,13 @@ export class ShadowFileManager {
     // Writes to disk via workspace.fs.writeFile. Since the file is in the workspace,
     // VS Code's file watcher auto-refreshes the in-memory document, triggering
     // GLSL re-analysis with a single signal.
-    // siblingRegions: for .vs files, the parsed regions of the sibling .fs (for JSON header + declarations).
+    // siblingRegions: for vertex shaders (no JSON header), the parsed regions of a sibling with a JSON header.
     async update(realDoc: vscode.TextDocument, regions: IsfRegions, siblingRegions?: IsfRegions): Promise<void> {
         const key = realDoc.uri.toString()
         const shadowUri = this.makeShadowUri(realDoc.uri)
-        const isVertexShader = realDoc.uri.fsPath.endsWith('.vs')
+        const isVertexShader = !regions.json
 
-        // For .vs files, use sibling .fs regions for version + declarations; fall back to own regions.
+        // For vertex shaders, use sibling regions for version + declarations; fall back to own regions.
         const headerRegions = siblingRegions ?? regions
         const isV2 = parseIsfVersion(headerRegions) === IsfVersion.V2
         const declarations = generateDeclarations(headerRegions)

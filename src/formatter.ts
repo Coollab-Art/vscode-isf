@@ -20,7 +20,7 @@ export class IsfFormattingProvider implements vscode.DocumentFormattingEditProvi
 
         // Parse fresh from the current document text to avoid stale cache issues
         const regions = parseIsf(document.getText())
-        if (!regions.json) return []
+        if (!regions.json && !regions.glsl) return []
 
         // Update the cache and shadow file so they reflect the latest content
         // (the debounced handleDocument may not have run yet if the user saved quickly)
@@ -43,8 +43,10 @@ export class IsfFormattingProvider implements vscode.DocumentFormattingEditProvi
 
         const edits: vscode.TextEdit[] = []
 
-        const jsonEdit = this.formatJsonRegion(document, regions.json, options)
-        if (jsonEdit) edits.push(jsonEdit)
+        if (regions.json) {
+            const jsonEdit = this.formatJsonRegion(document, regions.json, options)
+            if (jsonEdit) edits.push(jsonEdit)
+        }
 
         const glslEdit = await this.formatGlslRegion(document, regions, options)
         if (glslEdit) edits.push(glslEdit)
