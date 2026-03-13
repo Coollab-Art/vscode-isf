@@ -22,6 +22,7 @@ import schema from '../schemas/isf-header.schema.json'
 const LANGUAGE_ID = 'isf'
 
 // Find a sibling file (same name, different extension) that contains a JSON header.
+// Prefers the in-memory version of open documents over the on-disk version.
 function findSiblingWithJsonHeader(filePath: string): IsfRegions | undefined {
     const dir = path.dirname(filePath)
     const baseName = path.basename(filePath, path.extname(filePath))
@@ -36,7 +37,10 @@ function findSiblingWithJsonHeader(filePath: string): IsfRegions | undefined {
         const entryPath = path.join(dir, entry)
         if (entryPath === filePath) continue
         try {
-            const regions = parseIsf(fs.readFileSync(entryPath, 'utf8'))
+            const entryUri = vscode.Uri.file(entryPath)
+            const openDoc = vscode.workspace.textDocuments.find(d => d.uri.toString() === entryUri.toString())
+            const text = openDoc ? openDoc.getText() : fs.readFileSync(entryPath, 'utf8')
+            const regions = parseIsf(text)
             if (regions.json) return regions
         } catch { /* skip unreadable files */ }
     }
@@ -112,7 +116,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
 
         const isVertexShader = !regions.json
-        // For .vs files: use the .fs sibling's JSON (for version detection) but the .vs GLSL body (for scanning).
+        // For vertex shaders: use the sibling's JSON (for version detection) but this file's GLSL body (for scanning).
         const regionsForVersionCheck: IsfRegions = siblingRegions
             ? { json: siblingRegions.json, glsl: regions.glsl }
             : regions
