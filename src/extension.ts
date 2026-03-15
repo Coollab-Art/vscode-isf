@@ -193,7 +193,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             for (const doc of vscode.workspace.textDocuments) {
                 if (doc.languageId !== LANGUAGE_ID) continue
                 const cached = regionCache.get(doc.uri.toString())
-                if (cached && !cached.json) handleDocument(doc)
+                if (cached && !cached.json) scheduleHandleDocument(doc, 1500)
             }
         }),
         vscode.workspace.onDidCloseTextDocument(doc => {
