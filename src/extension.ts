@@ -139,7 +139,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }
     }
 
-    function scheduleHandleDocument(doc: vscode.TextDocument): void {
+    function scheduleHandleDocument(doc: vscode.TextDocument, delayMs = 300): void {
         const key = doc.uri.toString()
         const existing = debounceTimers.get(key)
         if (existing) clearTimeout(existing)
@@ -147,7 +147,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             debounceTimers.delete(key)
             if (formattingInFlight.has(key)) return
             handleDocument(doc)
-        }, 300))
+        }, delayMs))
     }
 
     context.subscriptions.push(
@@ -171,7 +171,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             LANGUAGE_ID,
             new IsfFormattingProvider(regionCache, formattingInFlight, shadowManager),
         ),
-        vscode.workspace.onDidOpenTextDocument(doc => handleDocument(doc)),
+        // Use a longer debounce for document opens: processing sets diagnostics
+        // which updates explorer decorations and can cancel an in-progress rename.
+        vscode.workspace.onDidOpenTextDocument(doc => scheduleHandleDocument(doc, 1500)),
         vscode.workspace.onDidChangeTextDocument(e => scheduleHandleDocument(e.document)),
         // On save, flush the pending debounce immediately so there's a single
         // shadow write instead of two (save actions + debounced edit).

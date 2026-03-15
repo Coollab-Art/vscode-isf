@@ -5,7 +5,7 @@
 // Shadow files live in a `.isf-shadows/` directory at the workspace root so that
 // VS Code's file watcher picks up changes and auto-refreshes the in-memory document.
 // The directory is hidden from the explorer via `files.exclude` and ignored in git.
-// We write to disk with workspace.fs.writeFile and open the document once with
+// We write to disk with Node fs and open the document once with
 // openTextDocument (no visible tab). Subsequent writes are auto-refreshed by the
 // file watcher, keeping the document always clean (never dirty).
 //
@@ -67,12 +67,14 @@ export class ShadowFileManager {
         this.v1VsPreambleLines = v1VsPreambleText.trimEnd().split('\n')
         this.v2VsPreambleLines = v2VsPreambleText.trimEnd().split('\n')
 
-        // Re-open shadow documents if VS Code closes them (keeps the GLSL extension active)
+        // When VS Code garbage-collects a shadow document, clear the cached
+        // reference. It will be re-opened lazily on the next update() or
+        // openShadowDocument() call, avoiding focus-stealing reopens.
         this.disposables.push(
-            vscode.workspace.onDidCloseTextDocument(async (doc) => {
+            vscode.workspace.onDidCloseTextDocument(doc => {
                 for (const [, shadow] of this.shadows) {
                     if (shadow.doc === doc) {
-                        shadow.doc = await vscode.workspace.openTextDocument(shadow.shadowUri)
+                        shadow.doc = undefined
                     }
                 }
             })
@@ -80,7 +82,7 @@ export class ShadowFileManager {
     }
 
     // Update (or create) the shadow file for a given ISF document.
-    // Writes to disk via workspace.fs.writeFile. Since the file is in the workspace,
+    // Writes to disk via Node fs. Since the file is in the workspace,
     // VS Code's file watcher auto-refreshes the in-memory document, triggering
     // GLSL re-analysis with a single signal.
     // siblingRegions: for vertex shaders (no JSON header), the parsed regions of a sibling with a JSON header.
@@ -123,7 +125,9 @@ export class ShadowFileManager {
 
         this.shadows.set(key, { shadowUri, headerLineCount, content, doc: existing?.doc })
 
-        await vscode.workspace.fs.writeFile(shadowUri, Buffer.from(content, 'utf8'))
+        // Write with Node fs to avoid VS Code's workspace file-system events,
+        // which can refresh the explorer and steal focus.
+        fs.writeFileSync(shadowUri.fsPath, content, 'utf8')
 
         // Ensure the shadow document is open in the model so the GLSL extension watches it.
         // openTextDocument does NOT open a visible tab.
