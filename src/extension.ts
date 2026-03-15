@@ -124,6 +124,16 @@ export function activate(context: vscode.ExtensionContext): void {
             ? { json: siblingRegions.json, glsl: regions.glsl }
             : regions
         versionDiagnostics.set(doc.uri, checkVersionMismatch(regionsForVersionCheck, isVertexShader))
+
+        // When a fragment shader changes, re-process open vertex shaders so their
+        // sibling-derived diagnostics (ISFVSN, INPUTS) stay up-to-date.
+        if (regions.json) {
+            for (const d of vscode.workspace.textDocuments) {
+                if (d === doc || d.languageId !== LANGUAGE_ID) continue
+                const cached = regionCache.get(d.uri.toString())
+                if (cached && !cached.json) handleDocument(d)
+            }
+        }
     }
 
     function scheduleHandleDocument(doc: vscode.TextDocument): void {
@@ -167,6 +177,15 @@ export function activate(context: vscode.ExtensionContext): void {
                 debounceTimers.delete(key)
             }
             handleDocument(doc)
+        }),
+        // When files are renamed, sibling relationships change — re-process all
+        // open vertex shaders so they find (or lose) their sibling fragment shader.
+        vscode.workspace.onDidRenameFiles(() => {
+            for (const doc of vscode.workspace.textDocuments) {
+                if (doc.languageId !== LANGUAGE_ID) continue
+                const cached = regionCache.get(doc.uri.toString())
+                if (cached && !cached.json) handleDocument(doc)
+            }
         }),
         vscode.workspace.onDidCloseTextDocument(doc => {
             if (doc.languageId !== LANGUAGE_ID) return
