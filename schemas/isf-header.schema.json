@@ -55,7 +55,7 @@
           "PATH": { "type": "string", "description": "Relative path to the image file", "default": "" }
         }
       },
-      "default": { "someImage": { "PATH": "" } }
+      "default": { "importedImage": { "PATH": "" } }
     },
     "PERSISTENT_BUFFERS": {
       "description": "Persistent buffer declarations (v1 only)",
