@@ -89,7 +89,12 @@ export function parseIsf(text: string): IsfRegions {
         return result
     })
 
-    const glslStartLine = commentEndLine + 1
+    // Skip blank lines between */ and the GLSL body so they belong to the JSON
+    // formatter's range (which always emits exactly one blank separator line).
+    let glslStartLine = commentEndLine + 1
+    while (glslStartLine < lines.length && lines[glslStartLine].trim() === '') {
+        glslStartLine++
+    }
     return {
         json: {
             content: jsonLines.join('\n'),
