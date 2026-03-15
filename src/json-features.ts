@@ -421,6 +421,34 @@ function isInsideImportedPath(node: ASTNode | undefined): boolean {
     return false
 }
 
+// Common image file extensions supported by ISF runtimes and graphics frameworks.
+const IMAGE_EXTENSIONS = new Set([
+    // Raster basics
+    '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tga', '.ico',
+    // High dynamic range
+    '.hdr', '.exr', '.rgbe',
+    // TIFF
+    '.tif', '.tiff',
+    // Web formats
+    '.webp', '.avif', '.heic', '.heif',
+    // Adobe / design
+    '.psd', '.psb',
+    // GPU / compressed textures
+    '.dds', '.ktx', '.ktx2', '.astc', '.pvr', '.basis',
+    // Other
+    '.svg', '.raw', '.cr2', '.nef', '.arw', '.dng', '.orf', '.rw2',
+    '.ppm', '.pgm', '.pbm', '.pfm',
+    '.jp2', '.j2k', '.jpx',
+    '.qoi',
+])
+
+function isImageFile(fileName: string): boolean {
+    const ext = path.extname(fileName).toLowerCase()
+    if (IMAGE_EXTENSIONS.has(ext)) return true
+    const extra: string[] = vscode.workspace.getConfiguration('isf').get('importedImageExtensions', [])
+    return extra.some(e => ext === (e.startsWith('.') ? e.toLowerCase() : '.' + e.toLowerCase()))
+}
+
 // Generate file/directory completion items for IMPORTED PATH values.
 function getFilePathCompletions(
     documentUri: vscode.Uri,
@@ -456,7 +484,7 @@ function getFilePathCompletions(
             item.insertText = entry.name + '/'
             item.command = { command: 'editor.action.triggerSuggest', title: '' }
             items.push(item)
-        } else if (entry.isFile()) {
+        } else if (entry.isFile() && isImageFile(entry.name)) {
             const item = new vscode.CompletionItem(entry.name, vscode.CompletionItemKind.File)
             items.push(item)
         }

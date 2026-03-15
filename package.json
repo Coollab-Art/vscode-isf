@@ -54,7 +54,18 @@
           "meta.embedded.block.glsl": "glsl"
         }
       }
-    ]
+    ],
+    "configuration": {
+      "title": "ISF",
+      "properties": {
+        "isf.importedImageExtensions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "markdownDescription": "Additional file extensions to show when autocompleting `IMPORTED` image paths (e.g. `[\".ktx\", \".dds\"]`). The built-in list already covers most common image formats."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run build",
