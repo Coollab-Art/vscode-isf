@@ -47,7 +47,7 @@ function findSiblingWithJsonHeader(filePath: string): IsfRegions | undefined {
     return undefined
 }
 
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
     const jsonFeatures = new IsfJsonFeatures(schema as any)
 
     // Shadow file manager: maintains a real .glsl file per ISF document
@@ -57,6 +57,9 @@ export function activate(context: vscode.ExtensionContext): void {
     if (vscode.workspace.workspaceFolders?.length) {
         shadowManager = new ShadowFileManager(preamble, v1Only, v2Shared, v2Only, fsPreamble, v1VsPreamble, v2VsPreamble)
         context.subscriptions.push({ dispose: () => shadowManager!.dispose() })
+        // Ensure shadow dir is hidden from explorer BEFORE any shadow files are
+        // written, so the config update never races with user interaction.
+        await shadowManager.hideFromExplorer()
     } else {
         vscode.window.showWarningMessage('ISF: Open a folder for full GLSL support (diagnostics, completions, formatting). JSON header features work without a folder.')
     }

@@ -67,9 +67,6 @@ export class ShadowFileManager {
         this.v1VsPreambleLines = v1VsPreambleText.trimEnd().split('\n')
         this.v2VsPreambleLines = v2VsPreambleText.trimEnd().split('\n')
 
-        // Hide the shadow directory from the file explorer
-        this.hideFromExplorer()
-
         // Re-open shadow documents if VS Code closes them (keeps the GLSL extension active)
         this.disposables.push(
             vscode.workspace.onDidCloseTextDocument(async (doc) => {
@@ -210,7 +207,7 @@ export class ShadowFileManager {
     }
 
     // Add .isf-shadows/ to files.exclude so it doesn't show in the explorer
-    private async hideFromExplorer(): Promise<void> {
+    async hideFromExplorer(): Promise<void> {
         try {
             const config = vscode.workspace.getConfiguration('files')
             const exclude: Record<string, boolean> = { ...config.get('exclude') }
