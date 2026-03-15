@@ -160,11 +160,17 @@ export class IsfJsonFeatures {
                     )
                 }
 
+                // Detect trailing comma from the language service (present when siblings follow)
+                const trailingComma = item.textEdit && 'range' in item.textEdit
+                    && item.textEdit.newText.trimEnd().endsWith(',')
+                    ? ','
+                    : ''
+
                 // Override value placeholder with TYPE-specific snippet when TYPE is known
                 if (inputType && vscodeItem.range) {
                     const valueSnippet = TYPE_VALUE_SNIPPETS[inputType]?.[item.label]
                     if (valueSnippet) {
-                        vscodeItem.insertText = new vscode.SnippetString(`"${item.label}": ${valueSnippet}`)
+                        vscodeItem.insertText = new vscode.SnippetString(`"${item.label}": ${valueSnippet}${trailingComma}`)
                     }
                 }
 
@@ -172,7 +178,7 @@ export class IsfJsonFeatures {
                 if (!inputType && vscodeItem.range) {
                     const fieldSnippet = FIELD_VALUE_SNIPPETS[item.label]
                     if (fieldSnippet) {
-                        vscodeItem.insertText = new vscode.SnippetString(`"${item.label}": ${fieldSnippet}`)
+                        vscodeItem.insertText = new vscode.SnippetString(`"${item.label}": ${fieldSnippet}${trailingComma}`)
                     }
                 }
 
