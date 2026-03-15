@@ -2,7 +2,7 @@ import * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
 import { parseIsf, IsfRegions } from './isf-parser'
-import { IsfCompletionProvider, IsfHoverProvider } from './language-features'
+import { IsfCompletionProvider, IsfHoverProvider, IsfColorProvider } from './language-features'
 import { IsfFormattingProvider } from './formatter'
 import { IsfJsonFeatures } from './json-features'
 import { ShadowFileManager, parseIsfVersion, IsfVersion } from './glsl-shadow-file'
@@ -162,6 +162,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         vscode.languages.registerHoverProvider(
             LANGUAGE_ID,
             new IsfHoverProvider(jsonFeatures, regionCache, shadowManager),
+        ),
+        vscode.languages.registerColorProvider(
+            LANGUAGE_ID,
+            new IsfColorProvider(jsonFeatures, regionCache),
         ),
         vscode.languages.registerDocumentFormattingEditProvider(
             LANGUAGE_ID,

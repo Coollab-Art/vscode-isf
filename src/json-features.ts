@@ -225,6 +225,55 @@ export class IsfJsonFeatures {
         return new vscode.Hover(contents, range)
     }
 
+    getColorInformations(region: JsonRegion): vscode.ColorInformation[] {
+        const doc = makeDoc(region)
+        const parsed = this.service.parseJSONDocument(doc)
+        if (!parsed.root || parsed.root.type !== 'object') return []
+
+        const inputsProp = (parsed.root as ObjectASTNode).properties.find(
+            p => (p.keyNode as StringASTNode).value === 'INPUTS'
+        )
+        if (!inputsProp?.valueNode || inputsProp.valueNode.type !== 'array') return []
+
+        const results: vscode.ColorInformation[] = []
+        for (const inputNode of (inputsProp.valueNode as ArrayASTNode).items) {
+            if (inputNode.type !== 'object') continue
+            const inputObj = inputNode as ObjectASTNode
+
+            const typeProp = inputObj.properties.find(p => (p.keyNode as StringASTNode).value === 'TYPE')
+            if (!typeProp?.valueNode || typeProp.valueNode.type !== 'string') continue
+            if ((typeProp.valueNode as StringASTNode).value !== 'color') continue
+
+            for (const prop of inputObj.properties) {
+                const propName = (prop.keyNode as StringASTNode).value
+                if (propName !== 'DEFAULT' && propName !== 'IDENTITY') continue
+                if (!prop.valueNode || prop.valueNode.type !== 'array') continue
+
+                const items = (prop.valueNode as ArrayASTNode).items
+                if (items.length !== 4 || items.some(i => i.type !== 'number')) continue
+
+                const [r, g, b, a] = items.map(i => (i as { value: number }).value)
+                const start = doc.positionAt(prop.valueNode.offset)
+                const end = doc.positionAt(prop.valueNode.offset + prop.valueNode.length)
+                const range = new vscode.Range(
+                    new vscode.Position(region.startLine + start.line, start.character),
+                    new vscode.Position(region.startLine + end.line, end.character),
+                )
+                results.push(new vscode.ColorInformation(range, new vscode.Color(r, g, b, a)))
+            }
+        }
+        return results
+    }
+
+    getColorPresentations(color: vscode.Color): vscode.ColorPresentation[] {
+        const fmt = (n: number) => {
+            const s = n.toFixed(4).replace(/0+$/, '').replace(/\.$/, '.0')
+            return s
+        }
+        const label = `[${fmt(color.red)}, ${fmt(color.green)}, ${fmt(color.blue)}, ${fmt(color.alpha)}]`
+        return [new vscode.ColorPresentation(label)]
+    }
+
     async getDiagnostics(region: JsonRegion): Promise<vscode.Diagnostic[]> {
         const doc = makeDoc(region)
         const parsed = this.service.parseJSONDocument(doc)

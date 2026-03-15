@@ -96,6 +96,23 @@ export class IsfHoverProvider implements vscode.HoverProvider {
     }
 }
 
+export class IsfColorProvider implements vscode.DocumentColorProvider {
+    constructor(
+        private readonly jsonFeatures: IsfJsonFeatures,
+        private readonly regionCache: Map<string, IsfRegions>,
+    ) {}
+
+    provideDocumentColors(document: vscode.TextDocument): vscode.ColorInformation[] {
+        const regions = this.regionCache.get(document.uri.toString())
+        if (!regions?.json) return []
+        return this.jsonFeatures.getColorInformations(regions.json)
+    }
+
+    provideColorPresentations(color: vscode.Color): vscode.ColorPresentation[] {
+        return this.jsonFeatures.getColorPresentations(color)
+    }
+}
+
 // Remap a range from shadow GLSL coordinates to real ISF file coordinates
 function remapRange(range: vscode.Range, headerLineCount: number, glslStartLine: number): vscode.Range {
     return new vscode.Range(
