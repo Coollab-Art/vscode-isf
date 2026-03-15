@@ -19,7 +19,7 @@ export class IsfCompletionProvider implements vscode.CompletionItemProvider {
 
         // JSON header region -- provide schema-based completions
         if (regions.json && position.line >= regions.json.startLine && position.line <= regions.json.endLine) {
-            return this.jsonFeatures.getCompletions(regions.json, position.line, position.character)
+            return this.jsonFeatures.getCompletions(regions.json, position.line, position.character, document.uri)
         }
 
         // GLSL body region -- forward to shadow file for full completions

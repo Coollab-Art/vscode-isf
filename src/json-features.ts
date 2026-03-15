@@ -4,6 +4,8 @@
 // The built-in JSON LS only handles `file://` and `untitled://` schemes, so it cannot
 // process our virtual documents — hence we embed the same underlying library ourselves.
 import * as vscode from 'vscode'
+import * as fs from 'fs'
+import * as path from 'path'
 import {
     getLanguageService,
     TextDocument as JSONTextDocument,
@@ -87,15 +89,22 @@ export class IsfJsonFeatures {
         region: JsonRegion,
         realLine: number,
         realCol: number,
+        documentUri?: vscode.Uri,
     ): Promise<vscode.CompletionItem[]> {
         const doc = makeDoc(region)
         const parsed = this.service.parseJSONDocument(doc)
         const virtualPos = { line: realLine - region.startLine, character: realCol }
+
+        // If inside an IMPORTED PATH value, provide file path completions instead
+        const offset = doc.offsetAt(virtualPos)
+        if (documentUri && isInsideImportedPath(parsed.getNodeFromOffset(offset))) {
+            return getFilePathCompletions(documentUri, doc, offset)
+        }
+
         const result = await this.service.doComplete(doc, virtualPos, parsed)
         if (!result) return []
 
         // Detect the input TYPE at the cursor to filter inapplicable property completions
-        const offset = doc.offsetAt(virtualPos)
         const inputType = getInputTypeAtOffset(parsed.getNodeFromOffset(offset))
 
         return result.items
@@ -381,6 +390,78 @@ function isHoveringKey(node: ASTNode | undefined, keyName: string): boolean {
         : node.parent?.type === 'property' ? node.parent as PropertyASTNode
         : undefined
     return prop !== undefined && (prop.keyNode as StringASTNode).value === keyName
+}
+
+// Check if the cursor node is inside the value of a PATH property within an IMPORTED entry.
+// AST shape: root > IMPORTED (property) > {object value} > {name} (property) > {object value} > PATH (property) > string value
+function isInsideImportedPath(node: ASTNode | undefined): boolean {
+    if (!node) return false
+    // The node should be a string value (or we're positioned inside one)
+    let current: ASTNode | undefined = node
+    // Walk up to find a property named PATH
+    while (current) {
+        if (current.type === 'property') {
+            const prop = current as PropertyASTNode
+            if ((prop.keyNode as StringASTNode).value === 'PATH') {
+                // Now check that this PATH property is inside an IMPORTED entry
+                // parent should be an object, whose parent is a property, whose parent is IMPORTED object
+                const entryObj = prop.parent
+                if (!entryObj || entryObj.type !== 'object') return false
+                const entryProp = entryObj.parent
+                if (!entryProp || entryProp.type !== 'property') return false
+                const importedObj = entryProp.parent
+                if (!importedObj || importedObj.type !== 'object') return false
+                const importedProp = importedObj.parent
+                if (!importedProp || importedProp.type !== 'property') return false
+                return ((importedProp as PropertyASTNode).keyNode as StringASTNode).value === 'IMPORTED'
+            }
+        }
+        current = current.parent
+    }
+    return false
+}
+
+// Generate file/directory completion items for IMPORTED PATH values.
+function getFilePathCompletions(
+    documentUri: vscode.Uri,
+    doc: JSONTextDocument,
+    offset: number,
+): vscode.CompletionItem[] {
+    const docDir = path.dirname(documentUri.fsPath)
+
+    // Extract the partial path typed so far: text between the opening quote and cursor
+    const text = doc.getText()
+    // Walk back from offset to find the opening quote of the string value
+    let quoteStart = offset - 1
+    while (quoteStart >= 0 && text[quoteStart] !== '"') quoteStart--
+    const partial = text.substring(quoteStart + 1, offset)
+
+    // Determine which directory to list
+    const partialDir = partial.includes('/') ? partial.substring(0, partial.lastIndexOf('/') + 1) : ''
+    const resolvedDir = path.resolve(docDir, partialDir)
+
+    let entries: fs.Dirent[]
+    try {
+        entries = fs.readdirSync(resolvedDir, { withFileTypes: true })
+    } catch {
+        return []
+    }
+
+    const items: vscode.CompletionItem[] = []
+    for (const entry of entries) {
+        if (entry.name.startsWith('.')) continue
+
+        if (entry.isDirectory()) {
+            const item = new vscode.CompletionItem(entry.name, vscode.CompletionItemKind.Folder)
+            item.insertText = entry.name + '/'
+            item.command = { command: 'editor.action.triggerSuggest', title: '' }
+            items.push(item)
+        } else if (entry.isFile()) {
+            const item = new vscode.CompletionItem(entry.name, vscode.CompletionItemKind.File)
+            items.push(item)
+        }
+    }
+    return items
 }
 
 function makeDiag(

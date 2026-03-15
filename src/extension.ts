@@ -154,7 +154,7 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.languages.registerCompletionItemProvider(
             LANGUAGE_ID,
             new IsfCompletionProvider(jsonFeatures, regionCache, shadowManager),
-            '"', ':'
+            '"', ':', '/'
         ),
         vscode.languages.registerHoverProvider(
             LANGUAGE_ID,
