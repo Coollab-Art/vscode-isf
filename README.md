@@ -18,10 +18,13 @@ You can also scope this to specific directories (e.g. `"shaders/*.fs": "isf"`), 
 ### JSON header
 
 - **Autocompletion** for all ISF fields (`INPUTS`, `PASSES`, `IMPORTED`, `CATEGORIES`, `ISFVSN`, etc.)
+- **Path autocompletion** for `IMPORTED` images — suggests local files, filtered to image extensions
 - **Hover documentation** on all fields and values
 - **Validation** with helpful error messages:
   - Unknown fields, wrong value types, mismatched `LABELS`/`VALUES` lengths
   - Non-standard `ISFVSN` values
+- **Color picker** for color-type inputs
+- **Smart paste** — when pasting a JSON key that already exists (e.g. `INPUTS`, `CATEGORIES`), arrays are concatenated and objects are merged instead of replaced
 - **Formatting**
 - Syntax highlighting
 
@@ -58,7 +61,7 @@ For GLSL autocompletion, hover, and error diagnostics, install a GLSL extension.
 
 ## Extension Settings
 
-No settings.
+- **`isf.importedImageExtensions`** — Additional file extensions to show when autocompleting `IMPORTED` image paths (e.g. `[".ktx", ".dds"]`). The built-in list already covers common formats (PNG, JPG, EXR, etc.).
 
 ## Known Issues
 
