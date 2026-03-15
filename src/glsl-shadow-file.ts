@@ -15,6 +15,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { randomUUID } from 'crypto'
 import { IsfRegions } from './isf-parser'
+import { parseJsonMergingDuplicates } from './json-merge'
 
 const SHADOW_DIR_NAME = '.isf-shadows'
 
@@ -243,7 +244,7 @@ export function parseIsfVersion(regions: IsfRegions): IsfVersion {
     if (!regions.json) return IsfVersion.V1
     let header: Record<string, unknown>
     try {
-        header = JSON.parse(regions.json.content)
+        header = parseJsonMergingDuplicates(regions.json.content)
     } catch {
         return IsfVersion.V1
     }
@@ -260,7 +261,7 @@ function generateDeclarations(regions: IsfRegions): string[] {
 
     let header: Record<string, unknown>
     try {
-        header = JSON.parse(regions.json.content)
+        header = parseJsonMergingDuplicates(regions.json.content)
     } catch {
         return []
     }

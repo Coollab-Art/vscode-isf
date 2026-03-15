@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 import { parseIsf, IsfRegions, JsonRegion } from './isf-parser'
 import { ShadowFileManager } from './glsl-shadow-file'
+import { parseJsonMergingDuplicates } from './json-merge'
 
 export class IsfFormattingProvider implements vscode.DocumentFormattingEditProvider {
     constructor(
@@ -69,7 +70,7 @@ export class IsfFormattingProvider implements vscode.DocumentFormattingEditProvi
     ): vscode.TextEdit | undefined {
         let parsed: unknown
         try {
-            parsed = JSON.parse(region.content)
+            parsed = parseJsonMergingDuplicates(region.content)
         } catch {
             return undefined // Don't format if JSON is invalid
         }

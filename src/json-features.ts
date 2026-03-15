@@ -236,36 +236,38 @@ export class IsfJsonFeatures {
         const parsed = this.service.parseJSONDocument(doc)
         if (!parsed.root || parsed.root.type !== 'object') return []
 
-        const inputsProp = (parsed.root as ObjectASTNode).properties.find(
+        const inputsProps = (parsed.root as ObjectASTNode).properties.filter(
             p => (p.keyNode as StringASTNode).value === 'INPUTS'
         )
-        if (!inputsProp?.valueNode || inputsProp.valueNode.type !== 'array') return []
 
         const results: vscode.ColorInformation[] = []
-        for (const inputNode of (inputsProp.valueNode as ArrayASTNode).items) {
-            if (inputNode.type !== 'object') continue
-            const inputObj = inputNode as ObjectASTNode
+        for (const inputsProp of inputsProps) {
+            if (!inputsProp?.valueNode || inputsProp.valueNode.type !== 'array') continue
+            for (const inputNode of (inputsProp.valueNode as ArrayASTNode).items) {
+                if (inputNode.type !== 'object') continue
+                const inputObj = inputNode as ObjectASTNode
 
-            const typeProp = inputObj.properties.find(p => (p.keyNode as StringASTNode).value === 'TYPE')
-            if (!typeProp?.valueNode || typeProp.valueNode.type !== 'string') continue
-            if ((typeProp.valueNode as StringASTNode).value !== 'color') continue
+                const typeProp = inputObj.properties.find(p => (p.keyNode as StringASTNode).value === 'TYPE')
+                if (!typeProp?.valueNode || typeProp.valueNode.type !== 'string') continue
+                if ((typeProp.valueNode as StringASTNode).value !== 'color') continue
 
-            for (const prop of inputObj.properties) {
-                const propName = (prop.keyNode as StringASTNode).value
-                if (propName !== 'DEFAULT' && propName !== 'IDENTITY') continue
-                if (!prop.valueNode || prop.valueNode.type !== 'array') continue
+                for (const prop of inputObj.properties) {
+                    const propName = (prop.keyNode as StringASTNode).value
+                    if (propName !== 'DEFAULT' && propName !== 'IDENTITY') continue
+                    if (!prop.valueNode || prop.valueNode.type !== 'array') continue
 
-                const items = (prop.valueNode as ArrayASTNode).items
-                if (items.length !== 4 || items.some(i => i.type !== 'number')) continue
+                    const items = (prop.valueNode as ArrayASTNode).items
+                    if (items.length !== 4 || items.some(i => i.type !== 'number')) continue
 
-                const [r, g, b, a] = items.map(i => (i as { value: number }).value)
-                const start = doc.positionAt(prop.valueNode.offset)
-                const end = doc.positionAt(prop.valueNode.offset + prop.valueNode.length)
-                const range = new vscode.Range(
-                    new vscode.Position(region.startLine + start.line, start.character),
-                    new vscode.Position(region.startLine + end.line, end.character),
-                )
-                results.push(new vscode.ColorInformation(range, new vscode.Color(r, g, b, a)))
+                    const [r, g, b, a] = items.map(i => (i as { value: number }).value)
+                    const start = doc.positionAt(prop.valueNode.offset)
+                    const end = doc.positionAt(prop.valueNode.offset + prop.valueNode.length)
+                    const range = new vscode.Range(
+                        new vscode.Position(region.startLine + start.line, start.character),
+                        new vscode.Position(region.startLine + end.line, end.character),
+                    )
+                    results.push(new vscode.ColorInformation(range, new vscode.Color(r, g, b, a)))
+                }
             }
         }
         return results
@@ -284,17 +286,26 @@ export class IsfJsonFeatures {
         const doc = makeDoc(region)
         const parsed = this.service.parseJSONDocument(doc)
         const lsDiagnostics = await this.service.doValidation(doc, parsed)
-        const mapped = lsDiagnostics.map(err => {
-            const range = new vscode.Range(
-                new vscode.Position(region.startLine + err.range.start.line, err.range.start.character),
-                new vscode.Position(region.startLine + err.range.end.line, err.range.end.character),
-            )
-            const severity = err.severity === 1
-                ? vscode.DiagnosticSeverity.Error
-                : vscode.DiagnosticSeverity.Warning
-            return new vscode.Diagnostic(range, err.message, severity)
-        })
-        return [...mapped, ...validateInputs(region, doc, parsed.root), ...validateIsfVsn(region, doc, parsed.root)]
+        // Filter out the generic "Duplicate object key" warnings from the LS —
+        // we replace them with our own actionable message below.
+        const mapped = lsDiagnostics
+            .filter(err => !err.message.startsWith('Duplicate object key'))
+            .map(err => {
+                const range = new vscode.Range(
+                    new vscode.Position(region.startLine + err.range.start.line, err.range.start.character),
+                    new vscode.Position(region.startLine + err.range.end.line, err.range.end.character),
+                )
+                const severity = err.severity === 1
+                    ? vscode.DiagnosticSeverity.Error
+                    : vscode.DiagnosticSeverity.Warning
+                return new vscode.Diagnostic(range, err.message, severity)
+            })
+        return [
+            ...mapped,
+            ...validateInputs(region, doc, parsed.root),
+            ...validateIsfVsn(region, doc, parsed.root),
+            ...validateDuplicateKeys(region, doc, parsed.root),
+        ]
     }
 }
 
@@ -325,54 +336,57 @@ function getInputTypeAtOffset(node: ASTNode | undefined): string | undefined {
 function validateInputs(region: JsonRegion, doc: JSONTextDocument, root: ASTNode | undefined): vscode.Diagnostic[] {
     if (!root || root.type !== 'object') return []
 
-    const inputsProp = (root as ObjectASTNode).properties.find(
+    const inputsProps = (root as ObjectASTNode).properties.filter(
         p => (p.keyNode as StringASTNode).value === 'INPUTS'
     )
-    if (!inputsProp?.valueNode || inputsProp.valueNode.type !== 'array') return []
+    if (inputsProps.length === 0) return []
 
     const diags: vscode.Diagnostic[] = []
-    for (const inputNode of (inputsProp.valueNode as ArrayASTNode).items) {
-        if (inputNode.type !== 'object') continue
-        const inputObj = inputNode as ObjectASTNode
+    for (const inputsProp of inputsProps) {
+        if (!inputsProp?.valueNode || inputsProp.valueNode.type !== 'array') continue
+        for (const inputNode of (inputsProp.valueNode as ArrayASTNode).items) {
+            if (inputNode.type !== 'object') continue
+            const inputObj = inputNode as ObjectASTNode
 
-        const typeProp = inputObj.properties.find(p => (p.keyNode as StringASTNode).value === 'TYPE')
-        if (!typeProp?.valueNode || typeProp.valueNode.type !== 'string') continue
-        const inputType = (typeProp.valueNode as StringASTNode).value
+            const typeProp = inputObj.properties.find(p => (p.keyNode as StringASTNode).value === 'TYPE')
+            if (!typeProp?.valueNode || typeProp.valueNode.type !== 'string') continue
+            const inputType = (typeProp.valueNode as StringASTNode).value
 
-        const allowed = INPUT_PROPS_BY_TYPE[inputType]
-        if (!allowed) continue
+            const allowed = INPUT_PROPS_BY_TYPE[inputType]
+            if (!allowed) continue
 
-        for (const prop of inputObj.properties) {
-            const propName = (prop.keyNode as StringASTNode).value
+            for (const prop of inputObj.properties) {
+                const propName = (prop.keyNode as StringASTNode).value
 
-            // Warn about properties that don't apply to this TYPE
-            if (!allowed.has(propName)) {
-                diags.push(makeDiag(doc, region, prop.keyNode,
-                    `"${propName}" is not applicable for TYPE "${inputType}"`,
-                    vscode.DiagnosticSeverity.Warning,
-                ))
-                continue
+                // Warn about properties that don't apply to this TYPE
+                if (!allowed.has(propName)) {
+                    diags.push(makeDiag(doc, region, prop.keyNode,
+                        `"${propName}" is not applicable for TYPE "${inputType}"`,
+                        vscode.DiagnosticSeverity.Warning,
+                    ))
+                    continue
+                }
+
+                // Warn about wrong value types for DEFAULT, IDENTITY, MIN, MAX
+                if (!prop.valueNode) continue
+                const valueError = checkValueType(inputType, propName, prop.valueNode)
+                if (valueError) {
+                    diags.push(makeDiag(doc, region, prop.valueNode, valueError, vscode.DiagnosticSeverity.Warning))
+                }
             }
 
-            // Warn about wrong value types for DEFAULT, IDENTITY, MIN, MAX
-            if (!prop.valueNode) continue
-            const valueError = checkValueType(inputType, propName, prop.valueNode)
-            if (valueError) {
-                diags.push(makeDiag(doc, region, prop.valueNode, valueError, vscode.DiagnosticSeverity.Warning))
-            }
-        }
-
-        // Warn when LABELS and VALUES have different lengths
-        const labelsProp = inputObj.properties.find(p => (p.keyNode as StringASTNode).value === 'LABELS')
-        const valuesProp = inputObj.properties.find(p => (p.keyNode as StringASTNode).value === 'VALUES')
-        if (labelsProp?.valueNode?.type === 'array' && valuesProp?.valueNode?.type === 'array') {
-            const labelsLen = (labelsProp.valueNode as ArrayASTNode).items.length
-            const valuesLen = (valuesProp.valueNode as ArrayASTNode).items.length
-            if (labelsLen !== valuesLen) {
-                diags.push(makeDiag(doc, region, labelsProp.keyNode,
-                    `LABELS has ${labelsLen} item(s) but VALUES has ${valuesLen} — they must have the same length`,
-                    vscode.DiagnosticSeverity.Warning,
-                ))
+            // Warn when LABELS and VALUES have different lengths
+            const labelsProp = inputObj.properties.find(p => (p.keyNode as StringASTNode).value === 'LABELS')
+            const valuesProp = inputObj.properties.find(p => (p.keyNode as StringASTNode).value === 'VALUES')
+            if (labelsProp?.valueNode?.type === 'array' && valuesProp?.valueNode?.type === 'array') {
+                const labelsLen = (labelsProp.valueNode as ArrayASTNode).items.length
+                const valuesLen = (valuesProp.valueNode as ArrayASTNode).items.length
+                if (labelsLen !== valuesLen) {
+                    diags.push(makeDiag(doc, region, labelsProp.keyNode,
+                        `LABELS has ${labelsLen} item(s) but VALUES has ${valuesLen} — they must have the same length`,
+                        vscode.DiagnosticSeverity.Warning,
+                    ))
+                }
             }
         }
     }
@@ -393,6 +407,35 @@ function validateIsfVsn(region: JsonRegion, doc: JSONTextDocument, root: ASTNode
         `Non-standard ISF version "${raw}". Only "1.0" and "2.0" exist.`,
         vscode.DiagnosticSeverity.Warning,
     )]
+}
+
+// Warn when the same top-level key appears more than once.
+function validateDuplicateKeys(region: JsonRegion, doc: JSONTextDocument, root: ASTNode | undefined): vscode.Diagnostic[] {
+    if (!root || root.type !== 'object') return []
+    const diags: vscode.Diagnostic[] = []
+    const seen = new Map<string, PropertyASTNode>()
+    for (const prop of (root as ObjectASTNode).properties) {
+        const key = (prop.keyNode as StringASTNode).value
+        const first = seen.get(key)
+        if (first) {
+            // Warn on the second (and subsequent) occurrence
+            diags.push(makeDiag(doc, region, prop.keyNode,
+                `Duplicate key "${key}" — format the file to merge.`,
+                vscode.DiagnosticSeverity.Warning,
+            ))
+            // Also warn on the first occurrence (once)
+            if (first.keyNode) {
+                diags.push(makeDiag(doc, region, first.keyNode,
+                    `Duplicate key "${key}" — format the file to merge.`,
+                    vscode.DiagnosticSeverity.Warning,
+                ))
+                seen.set(key, undefined as any) // prevent re-warning on the first
+            }
+        } else {
+            seen.set(key, prop)
+        }
+    }
+    return diags
 }
 
 function checkValueType(inputType: string, propName: string, valueNode: ASTNode): string | undefined {
