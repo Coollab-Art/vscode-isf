@@ -189,11 +189,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }),
         // When files are renamed, sibling relationships change — re-process all
         // open vertex shaders so they find (or lose) their sibling fragment shader.
-        vscode.workspace.onDidRenameFiles(() => {
+        vscode.workspace.onDidRenameFiles(e => {
+            // Clean up diagnostics and cache for old URIs — the document's URI
+            // is updated in place by VS Code (no close/open), so without this
+            // the explorer tries to decorate a tree node that no longer exists.
+            for (const { oldUri } of e.files) {
+                const oldKey = oldUri.toString()
+                const timer = debounceTimers.get(oldKey)
+                if (timer) { clearTimeout(timer); debounceTimers.delete(oldKey) }
+                const glslTimer = glslDiagDebounceTimers.get(oldKey)
+                if (glslTimer) { clearTimeout(glslTimer); glslDiagDebounceTimers.delete(oldKey) }
+                regionCache.delete(oldKey)
+                shadowManager?.remove(oldKey)
+                jsonDiagnostics.delete(oldUri)
+                glslDiagnostics.delete(oldUri)
+                versionDiagnostics.delete(oldUri)
+            }
+            // Re-process all open ISF documents: renamed files need fresh
+            // cache entries, and sibling relationships may have changed.
             for (const doc of vscode.workspace.textDocuments) {
                 if (doc.languageId !== LANGUAGE_ID) continue
-                const cached = regionCache.get(doc.uri.toString())
-                if (cached && !cached.json) scheduleHandleDocument(doc, 1500)
+                scheduleHandleDocument(doc, 1500)
             }
         }),
         vscode.workspace.onDidCloseTextDocument(doc => {
