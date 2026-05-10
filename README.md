@@ -1,5 +1,7 @@
 # ISF (Interactive Shader Format) for VS Code
 
+For the architecture overview, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## Setup
 
 Files with `.isf` extension are recognized automatically. For `.fs` and `.vs` files (the standard ISF extensions), you need to manually associate them since they conflict with F# and other languages. Add this to your workspace or user settings:
